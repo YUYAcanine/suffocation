@@ -11,9 +11,21 @@ const menuDescriptions: Record<string, string> = {
   // 他の料理もここに追加
 };
 
+type Vertex = {
+  x: number;
+  y: number;
+};
+
+type BoundingBox = {
+  description: string;
+  boundingPoly: {
+    vertices: Vertex[];
+  };
+};
+
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
-  const [boxes, setBoxes] = useState<any[]>([]);
+  const [boxes, setBoxes] = useState<BoundingBox[]>([]);
   const [selectedText, setSelectedText] = useState('');
   const [loading, setLoading] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -37,13 +49,17 @@ export default function Home() {
 
       const result = await res.json();
       const annotations = result.responses?.[0]?.textAnnotations || [];
-      setBoxes(annotations.slice(1));
+      const boxes: BoundingBox[] = annotations.slice(1).map((ann: any) => ({
+        description: ann.description,
+        boundingPoly: ann.boundingPoly,
+      }));
+      setBoxes(boxes);
       setLoading(false);
     };
     reader.readAsDataURL(file);
   };
 
-  const getBoxStyle = (box: any) => {
+  const getBoxStyle = (box: BoundingBox) => {
     if (!imageRef.current) return {};
     const img = imageRef.current;
     const scaleX = img.clientWidth / img.naturalWidth;
