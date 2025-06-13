@@ -2,20 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
+import Image from 'next/image';
 
-// 料理名と説明を保持する型
-type MenuEntry = {
-  name: string;
-  description: string;
-};
+type Vertex = { x: number; y: number; };
 
-// Vision APIのレスポンスから得られる文字の矩形
-type Vertex = { x: number; y: number };
 type BoundingBox = {
   description: string;
-  boundingPoly: {
-    vertices: Vertex[];
-  };
+  boundingPoly: { vertices: Vertex[] };
 };
 
 export default function Home() {
@@ -29,16 +22,13 @@ export default function Home() {
   useEffect(() => {
     fetch('/menu_descriptions.csv')
       .then((res) => res.text())
-      .then((csvText) => {
-        const parsed = Papa.parse<MenuEntry>(csvText, {
-          header: true,
-          skipEmptyLines: true,
-        });
+      .then((csv) => {
+        const parsed = Papa.parse(csv, { header: true });
         const map: Record<string, string> = {};
-        parsed.data.forEach((entry) => {
-          const name = entry.name?.trim();
-          const desc = entry.description?.trim();
-          if (name && desc) map[name] = desc;
+        (parsed.data as { name: string; description: string }[]).forEach(row => {
+          if (row.name && row.description) {
+            map[row.name.trim()] = row.description.trim();
+          }
         });
         setMenuDescriptions(map);
       });
@@ -54,24 +44,24 @@ export default function Home() {
       setImage(base64Image);
       setLoading(true);
 
-      const base64 = base64Image.split(',')[1];
       const res = await fetch('/api/vision-ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64 }),
+        body: JSON.stringify({ image: base64Image.split(',')[1] }),
       });
 
       const result = await res.json();
       const annotations = result.responses?.[0]?.textAnnotations || [];
+
       const parsedBoxes: BoundingBox[] = annotations.slice(1).map((ann: any) => ({
         description: ann.description,
         boundingPoly: {
-          vertices: ann.boundingPoly.vertices.map((v: Partial<Vertex>) => ({
-            x: v.x ?? 0,
-            y: v.y ?? 0,
-          })),
-        },
+          vertices: ann.boundingPoly.vertices.map((v: any) => ({
+            x: v.x ?? 0, y: v.y ?? 0,
+          }))
+        }
       }));
+
       setBoxes(parsedBoxes);
       setLoading(false);
     };
@@ -83,19 +73,14 @@ export default function Home() {
     const img = imageRef.current;
     const scaleX = img.clientWidth / img.naturalWidth;
     const scaleY = img.clientHeight / img.naturalHeight;
-
-    const vertices = box.boundingPoly.vertices;
-    const left = vertices[0].x * scaleX;
-    const top = vertices[0].y * scaleY;
-    const width = (vertices[1].x - vertices[0].x) * scaleX;
-    const height = (vertices[2].y - vertices[1].y) * scaleY;
+    const [v0, v1, v2] = box.boundingPoly.vertices;
 
     return {
       position: 'absolute' as const,
-      left,
-      top,
-      width,
-      height,
+      left: v0.x * scaleX,
+      top: v0.y * scaleY,
+      width: (v1.x - v0.x) * scaleX,
+      height: (v2.y - v1.y) * scaleY,
       border: '1px solid red',
       backgroundColor: 'rgba(255,255,255,0.3)',
       cursor: 'pointer',
@@ -115,19 +100,20 @@ export default function Home() {
 
       <div className="relative inline-block">
         {image && (
-          <img
+          <Image
             src={image}
-            ref={imageRef}
             alt="uploaded"
-            className="max-w-full"
+            ref={imageRef}
+            width={500}
+            height={500}
+            style={{ maxWidth: '100%', height: 'auto' }}
           />
         )}
-
         {boxes.map((box, idx) => (
           <div
             key={idx}
             style={getBoxStyle(box)}
-            onClick={() => setSelectedText(box.description.trim())}
+            onClick={() => setSelectedText(box.description)}
             title={box.description}
           />
         ))}
