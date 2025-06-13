@@ -3,27 +3,44 @@
 import { useState, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
 
+// 料理名と説明を保持する型
+type MenuEntry = {
+  name: string;
+  description: string;
+};
+
+// Vision APIのレスポンスから得られる文字の矩形
+type Vertex = { x: number; y: number };
+type BoundingBox = {
+  description: string;
+  boundingPoly: {
+    vertices: Vertex[];
+  };
+};
+
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
-  const [boxes, setBoxes] = useState<any[]>([]);
+  const [boxes, setBoxes] = useState<BoundingBox[]>([]);
   const [selectedText, setSelectedText] = useState('');
   const [loading, setLoading] = useState(false);
   const [menuDescriptions, setMenuDescriptions] = useState<Record<string, string>>({});
   const imageRef = useRef<HTMLImageElement>(null);
 
-  // CSVファイルを読み込んでmenuDescriptionsにセット
   useEffect(() => {
     fetch('/menu_descriptions.csv')
-      .then(response => response.text())
-      .then(csv => {
-        const parsed = Papa.parse(csv, { header: true });
-        const descriptions: Record<string, string> = {};
-        parsed.data.forEach((row: any) => {
-          if (row.name && row.description) {
-            descriptions[row.name] = row.description;
-          }
+      .then((res) => res.text())
+      .then((csvText) => {
+        const parsed = Papa.parse<MenuEntry>(csvText, {
+          header: true,
+          skipEmptyLines: true,
         });
-        setMenuDescriptions(descriptions);
+        const map: Record<string, string> = {};
+        parsed.data.forEach((entry) => {
+          const name = entry.name?.trim();
+          const desc = entry.description?.trim();
+          if (name && desc) map[name] = desc;
+        });
+        setMenuDescriptions(map);
       });
   }, []);
 
@@ -46,13 +63,22 @@ export default function Home() {
 
       const result = await res.json();
       const annotations = result.responses?.[0]?.textAnnotations || [];
-      setBoxes(annotations.slice(1));
+      const parsedBoxes: BoundingBox[] = annotations.slice(1).map((ann: any) => ({
+        description: ann.description,
+        boundingPoly: {
+          vertices: ann.boundingPoly.vertices.map((v: Partial<Vertex>) => ({
+            x: v.x ?? 0,
+            y: v.y ?? 0,
+          })),
+        },
+      }));
+      setBoxes(parsedBoxes);
       setLoading(false);
     };
     reader.readAsDataURL(file);
   };
 
-  const getBoxStyle = (box: any) => {
+  const getBoxStyle = (box: BoundingBox) => {
     if (!imageRef.current) return {};
     const img = imageRef.current;
     const scaleX = img.clientWidth / img.naturalWidth;
@@ -101,7 +127,7 @@ export default function Home() {
           <div
             key={idx}
             style={getBoxStyle(box)}
-            onClick={() => setSelectedText(box.description)}
+            onClick={() => setSelectedText(box.description.trim())}
             title={box.description}
           />
         ))}
@@ -110,10 +136,10 @@ export default function Home() {
       {loading && <p>OCR処理中...</p>}
 
       {selectedText && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white p-20 shadow-2xl z-10 text-xl leading-relaxed">
-          <h2 className="font-bold text-gray-700 mb-2">選択された料理：</h2>
-          <p className="text-gray-700 mb-2">{selectedText}</p>
-          <h2 className="text-gray-700 font-bold">説明：</h2>
+        <div className="fixed bottom-0 left-0 right-0 bg-white p-6 shadow-xl z-10 text-lg">
+          <h2 className="font-bold mb-2">選択された料理：</h2>
+          <p className="mb-2">{selectedText}</p>
+          <h2 className="font-bold">説明：</h2>
           <p className="text-gray-700">
             {menuDescriptions[selectedText] || '説明は見つかりませんでした'}
           </p>
@@ -122,4 +148,3 @@ export default function Home() {
     </main>
   );
 }
-
