@@ -4,11 +4,21 @@ import { useState, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
 import Image from 'next/image';
 
-type Vertex = { x: number; y: number; };
+type Vertex = {
+  x: number;
+  y: number;
+};
 
 type BoundingBox = {
   description: string;
-  boundingPoly: { vertices: Vertex[] };
+  boundingPoly: {
+    vertices: Vertex[];
+  };
+};
+
+type ParsedRow = {
+  name: string;
+  description: string;
 };
 
 export default function Home() {
@@ -19,18 +29,24 @@ export default function Home() {
   const [menuDescriptions, setMenuDescriptions] = useState<Record<string, string>>({});
   const imageRef = useRef<HTMLImageElement>(null);
 
+  // CSVの読み込み
   useEffect(() => {
     fetch('/menu_descriptions.csv')
-      .then((res) => res.text())
-      .then((csv) => {
-        const parsed = Papa.parse(csv, { header: true });
-        const map: Record<string, string> = {};
-        (parsed.data as { name: string; description: string }[]).forEach(row => {
-          if (row.name && row.description) {
-            map[row.name.trim()] = row.description.trim();
+      .then(res => res.text())
+      .then(text => {
+        Papa.parse(text, {
+          header: true,
+          complete: (result) => {
+            const data = result.data as ParsedRow[];
+            const map: Record<string, string> = {};
+            data.forEach(row => {
+              if (row.name && row.description) {
+                map[row.name.trim()] = row.description.trim();
+              }
+            });
+            setMenuDescriptions(map);
           }
         });
-        setMenuDescriptions(map);
       });
   }, []);
 
@@ -44,27 +60,33 @@ export default function Home() {
       setImage(base64Image);
       setLoading(true);
 
+      const base64 = base64Image.split(',')[1];
       const res = await fetch('/api/vision-ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Image.split(',')[1] }),
+        body: JSON.stringify({ image: base64 }),
       });
 
       const result = await res.json();
       const annotations = result.responses?.[0]?.textAnnotations || [];
 
-      const parsedBoxes: BoundingBox[] = annotations.slice(1).map((ann: any) => ({
-        description: ann.description,
-        boundingPoly: {
-          vertices: ann.boundingPoly.vertices.map((v: any) => ({
-            x: v.x ?? 0, y: v.y ?? 0,
-          }))
-        }
-      }));
+      const parsedBoxes: BoundingBox[] = annotations.slice(1).map((ann: unknown) => {
+        const a = ann as BoundingBox;
+        return {
+          description: a.description,
+          boundingPoly: {
+            vertices: a.boundingPoly.vertices.map((v: Partial<Vertex>) => ({
+              x: v.x ?? 0,
+              y: v.y ?? 0,
+            })),
+          },
+        };
+      });
 
       setBoxes(parsedBoxes);
       setLoading(false);
     };
+
     reader.readAsDataURL(file);
   };
 
@@ -73,14 +95,19 @@ export default function Home() {
     const img = imageRef.current;
     const scaleX = img.clientWidth / img.naturalWidth;
     const scaleY = img.clientHeight / img.naturalHeight;
-    const [v0, v1, v2] = box.boundingPoly.vertices;
+
+    const vertices = box.boundingPoly.vertices;
+    const left = vertices[0].x * scaleX;
+    const top = vertices[0].y * scaleY;
+    const width = (vertices[1].x - vertices[0].x) * scaleX;
+    const height = (vertices[2].y - vertices[1].y) * scaleY;
 
     return {
       position: 'absolute' as const,
-      left: v0.x * scaleX,
-      top: v0.y * scaleY,
-      width: (v1.x - v0.x) * scaleX,
-      height: (v2.y - v1.y) * scaleY,
+      left,
+      top,
+      width,
+      height,
       border: '1px solid red',
       backgroundColor: 'rgba(255,255,255,0.3)',
       cursor: 'pointer',
@@ -88,7 +115,7 @@ export default function Home() {
   };
 
   return (
-    <main className="p-4">
+    <main className="p-4 text-white">
       <h1 className="text-xl font-bold mb-4">Google Vision OCR メニューアプリ</h1>
       <input
         type="file"
@@ -106,9 +133,10 @@ export default function Home() {
             ref={imageRef}
             width={500}
             height={500}
-            style={{ maxWidth: '100%', height: 'auto' }}
+            className="max-w-full h-auto"
           />
         )}
+
         {boxes.map((box, idx) => (
           <div
             key={idx}
@@ -119,10 +147,10 @@ export default function Home() {
         ))}
       </div>
 
-      {loading && <p>OCR処理中...</p>}
+      {loading && <p className="text-black">OCR処理中...</p>}
 
       {selectedText && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white p-6 shadow-xl z-10 text-lg">
+        <div className="fixed bottom-0 left-0 right-0 bg-white p-6 shadow-xl z-10 text-lg text-black">
           <h2 className="font-bold mb-2">選択された料理：</h2>
           <p className="mb-2">{selectedText}</p>
           <h2 className="font-bold">説明：</h2>
