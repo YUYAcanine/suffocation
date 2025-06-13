@@ -2,13 +2,11 @@
 
 import { useState, useRef } from 'react';
 
-// 料理名に対応する説明マップ
 const menuDescriptions: Record<string, string> = {
   'ソーセージ': '二つに切って食べる',
   '食パン': '水につけて食べる',
   'ラーメン': 'スープから飲む',
   'おにぎり': 'お皿に置く',
-  // 他の料理もここに追加
 };
 
 type Vertex = {
@@ -49,10 +47,21 @@ export default function Home() {
 
       const result = await res.json();
       const annotations = result.responses?.[0]?.textAnnotations || [];
-      const boxes: BoundingBox[] = annotations.slice(1).map((ann: any) => ({
-        description: ann.description,
-        boundingPoly: ann.boundingPoly,
-      }));
+
+      // anyを使用しない型変換
+      const boxes: BoundingBox[] = annotations.slice(1).map((ann: unknown) => {
+        const a = ann as BoundingBox;
+        return {
+          description: a.description,
+          boundingPoly: {
+            vertices: a.boundingPoly.vertices.map((v: Partial<Vertex>) => ({
+              x: v.x ?? 0,
+              y: v.y ?? 0,
+            })),
+          },
+        };
+      });
+
       setBoxes(boxes);
       setLoading(false);
     };
