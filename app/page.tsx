@@ -150,7 +150,7 @@ export default function Home() {
       {loading && <p className="text-black">OCR処理中...</p>}
 
       {selectedText && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white p-6 shadow-xl z-10 text-lg text-black">
+        <div className="fixed bottom-0 left-0 right-0 bg-white p-20 shadow-xl z-10 text-lg text-black">
           <h2 className="font-bold mb-2">選択された料理：</h2>
           <p className="mb-2">{selectedText}</p>
           <h2 className="font-bold">説明：</h2>
