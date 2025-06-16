@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import imageCompression from 'browser-image-compression';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -10,7 +10,6 @@ type Vertex = { x: number; y: number };
 type BoundingBox = { description: string; boundingPoly: { vertices: Vertex[] } };
 type ParsedRow = { name: string; description: string };
 
-/* ---------- コンポーネント ---------- */
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
   const [boxes, setBoxes] = useState<BoundingBox[]>([]);
@@ -18,9 +17,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [menuDescriptions, setMenuDescriptions] = useState<Record<string, string>>({});
   const [scale, setScale] = useState<{ x: number; y: number }>({ x: 1, y: 1 });
-  const imgRef = useRef<HTMLImageElement>(null);
 
-  /* CSV 読み込み */
+  /* ---------- CSV 読み込み ---------- */
   useEffect(() => {
     fetch('/menu_descriptions.csv')
       .then(r => r.text())
@@ -38,8 +36,8 @@ export default function Home() {
       );
   }, []);
 
-  /* 画像アップロード → 圧縮 → OCR */
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  /* ---------- 画像アップロード ---------- */
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setLoading(true);
@@ -89,23 +87,20 @@ export default function Home() {
     }
   };
 
-  /* 画像読み込み後、描画サイズを取得しスケールを計算 */
-  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  /* ---------- 画像読込時にスケール取得 ---------- */
+  const onImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const el = e.currentTarget;
-    setScale({
-      x: el.clientWidth / el.naturalWidth,
-      y: el.clientHeight / el.naturalHeight,
-    });
+    setScale({ x: el.clientWidth / el.naturalWidth, y: el.clientHeight / el.naturalHeight });
   };
 
-  /* 戻る */
+  /* ---------- 戻る ---------- */
   const resetAll = () => {
     setImage(null);
     setBoxes([]);
     setSelectedText('');
   };
 
-  /* ボックススタイル (スケール補正後) */
+  /* ---------- ボックススタイル ---------- */
   const styleFromBox = (b: BoundingBox): React.CSSProperties => {
     const [v0, v1, v2] = b.boundingPoly.vertices;
     return {
@@ -118,58 +113,73 @@ export default function Home() {
     };
   };
 
+  /* ---------- JSX ---------- */
   return (
     <main className="h-screen flex flex-col text-black select-none">
-      {/* ファイル選択は画像がない場合のみ表示 */}
+      {/* === 画像が無いときの中央カメラボタン === */}
       {!image && (
-        <header className="p-4">
-          <h1 className="text-xl font-bold mb-2">Google Vision OCR メニューアプリ</h1>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleImageUpload}
-            className="w-full"
-          />
-        </header>
+        <div className="flex-1 flex items-center justify-center bg-gray-100">
+          <label className="flex flex-col items-center justify-center w-40 h-40 bg-white shadow-lg rounded-full cursor-pointer hover:scale-105 transition">
+            {/* SVG カメラアイコン */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-16 h-16 text-gray-700"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 7h4l2-3h6l2 3h4a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V9a2 2 0 012-2z"
+              />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleUpload}
+              className="hidden"
+            />
+          </label>
+        </div>
       )}
 
-      {/* 画像ビュー */}
-      <section className="flex-1 bg-black overflow-hidden relative">
-        {image && (
-          <>
-            {/* ← 矢印ボタン 位置：top-3 → top-12 */}
-            <button
-              onClick={resetAll}
-              className="fixed top-12 right-3 z-20 bg-white/80 hover:bg-white p-2 rounded shadow text-xl"
-              aria-label="戻る"
-            >
-              ←
-            </button>
+      {/* === 画像ビュー === */}
+      {image && (
+        <section className="flex-1 bg-black overflow-hidden relative">
+          {/* 戻るボタン（矢印） */}
+          <button
+            onClick={resetAll}
+            className="fixed top-12 right-3 z-20 bg-white/80 hover:bg-white p-2 rounded shadow text-xl"
+            aria-label="戻る"
+          >
+            ←
+          </button>
 
-            <TransformWrapper doubleClick={{ disabled: true }}>
-              <TransformComponent wrapperClass="w-full h-full">
-                <div className="relative inline-block mb-80">
-                  <img
-                    ref={imgRef}
-                    src={image}
-                    onLoad={onImageLoad}
-                    alt="menu"
-                    className="block max-w-full h-auto"
+          <TransformWrapper doubleClick={{ disabled: true }}>
+            <TransformComponent wrapperClass="w-full h-full">
+              <div className="relative inline-block mb-80">
+                <img
+                  src={image}
+                  onLoad={onImgLoad}
+                  alt="menu"
+                  className="block max-w-full h-auto"
+                />
+                {boxes.map((b, i) => (
+                  <div
+                    key={i}
+                    style={styleFromBox(b)}
+                    onClick={() => setSelectedText(b.description)}
                   />
-                  {boxes.map((b, i) => (
-                    <div
-                      key={i}
-                      style={styleFromBox(b)}
-                      onClick={() => setSelectedText(b.description)}
-                    />
-                  ))}
-                </div>
-              </TransformComponent>
-            </TransformWrapper>
-          </>
-        )}
-      </section>
+                ))}
+              </div>
+            </TransformComponent>
+          </TransformWrapper>
+        </section>
+      )}
 
       {/* ローディング */}
       {loading && (
@@ -195,5 +205,3 @@ export default function Home() {
     </main>
   );
 }
-
-
