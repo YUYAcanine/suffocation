@@ -2,64 +2,55 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
-import Image from 'next/image';
 import imageCompression from 'browser-image-compression';
+import {
+  TransformWrapper,
+  TransformComponent,
+} from 'react-zoom-pan-pinch';
 
-type Vertex = {
-  x: number;
-  y: number;
-};
-
+/* ---------- 型 ---------- */
+type Vertex = { x: number; y: number };
 type BoundingBox = {
   description: string;
-  boundingPoly: {
-    vertices: Vertex[];
-  };
+  boundingPoly: { vertices: Vertex[] };
 };
+type ParsedRow = { name: string; description: string };
 
-type ParsedRow = {
-  name: string;
-  description: string;
-};
-
+/* ---------- コンポーネント ---------- */
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
   const [boxes, setBoxes] = useState<BoundingBox[]>([]);
   const [selectedText, setSelectedText] = useState('');
   const [loading, setLoading] = useState(false);
-  const [menuDescriptions, setMenuDescriptions] = useState<Record<string, string>>({});
-  const imageRef = useRef<HTMLImageElement>(null);
+  const [menuDescriptions, setMenuDescriptions] =
+    useState<Record<string, string>>({});
 
-  // CSVの読み込み
+  /* CSV 読み込み */
   useEffect(() => {
     fetch('/menu_descriptions.csv')
-      .then(res => res.text())
-      .then(text => {
-        Papa.parse(text, {
+      .then((r) => r.text())
+      .then((csv) => {
+        Papa.parse(csv, {
           header: true,
-          complete: (result) => {
-            const data = result.data as ParsedRow[];
+          complete: (res) => {
             const map: Record<string, string> = {};
-            data.forEach(row => {
-              if (row.name && row.description) {
-                map[row.name.trim()] = row.description.trim();
-              }
+            (res.data as ParsedRow[]).forEach(({ name, description }) => {
+              if (name && description) map[name.trim()] = description.trim();
             });
             setMenuDescriptions(map);
-          }
+          },
         });
       });
   }, []);
 
+  /* 画像アップロード → 圧縮 → OCR */
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setLoading(true);
 
     try {
-      // 画像を圧縮（例：最大1MB, 幅最大1024px）
-      const compressedFile = await imageCompression(file, {
+      const compressed = await imageCompression(file, {
         maxSizeMB: 1,
         maxWidthOrHeight: 1024,
         useWebWorker: true,
@@ -67,111 +58,105 @@ export default function Home() {
 
       const reader = new FileReader();
       reader.onload = async () => {
-        const base64Image = reader.result as string;
-        setImage(base64Image);
+        const base64 = (reader.result as string) || '';
+        setImage(base64);
 
-        const base64 = base64Image.split(',')[1];
         const res = await fetch('/api/vision-ocr', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64 }),
+          body: JSON.stringify({ image: base64.split(',')[1] }),
         });
 
-        const result = await res.json();
-        const annotations = result.responses?.[0]?.textAnnotations || [];
+        const json = await res.json();
+        const anns = json.responses?.[0]?.textAnnotations || [];
 
-        const parsedBoxes: BoundingBox[] = annotations.slice(1).map((ann: unknown) => {
-          const a = ann as BoundingBox;
-          return {
-            description: a.description,
+        setBoxes(
+          anns.slice(1).map((ann: any) => ({
+            description: ann.description,
             boundingPoly: {
-              vertices: a.boundingPoly.vertices.map((v: Partial<Vertex>) => ({
+              vertices: ann.boundingPoly.vertices.map((v: any) => ({
                 x: v.x ?? 0,
                 y: v.y ?? 0,
               })),
             },
-          };
-        });
-
-        setBoxes(parsedBoxes);
+          }))
+        );
       };
-
-      reader.readAsDataURL(compressedFile);
-    } catch (error) {
-      console.error('画像圧縮エラー:', error);
-      alert('画像の処理中にエラーが発生しました');
+      reader.readAsDataURL(compressed);
     } finally {
       setLoading(false);
     }
-};
+  };
 
-  const getBoxStyle = (box: BoundingBox) => {
-    if (!imageRef.current) return {};
-    const img = imageRef.current;
-    const scaleX = img.clientWidth / img.naturalWidth;
-    const scaleY = img.clientHeight / img.naturalHeight;
-
-    const vertices = box.boundingPoly.vertices;
-    const left = vertices[0].x * scaleX;
-    const top = vertices[0].y * scaleY;
-    const width = (vertices[1].x - vertices[0].x) * scaleX;
-    const height = (vertices[2].y - vertices[1].y) * scaleY;
-
+  /* ボックス描画用スタイル */
+  const getBoxStyle = (b: BoundingBox): React.CSSProperties => {
+    const [v0, v1, v2] = b.boundingPoly.vertices;
     return {
-      position: 'absolute' as const,
-      left,
-      top,
-      width,
-      height,
-      border: '1px solid red',
-      backgroundColor: 'rgba(255,255,255,0.3)',
-      cursor: 'pointer',
+      position: 'absolute',
+      left: v0.x,
+      top: v0.y,
+      width: v1.x - v0.x,
+      height: v2.y - v1.y,
+      border: '2px solid red',
+      pointerEvents: 'auto' as React.CSSProperties['pointerEvents'], // ← 型アサーションで解決
     };
   };
 
   return (
-    <main className="p-4 text-white">
-      <h1 className="text-xl font-bold mb-4">Google Vision OCR メニューアプリ</h1>
-      <input
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleImageUpload}
-        className="mb-4"
-      />
+    <main className="h-screen flex flex-col text-black">
+      {/* ヘッダー & アップロード */}
+      <header className="p-4">
+        <h1 className="text-xl font-bold mb-2">Google Vision OCR メニューアプリ</h1>
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImageUpload}
+          className="w-full"
+        />
+      </header>
 
-      <div className="relative inline-block">
+      {/* 画像ビュー（ピンチズーム対応） */}
+      <section className="flex-1 bg-black overflow-hidden">
         {image && (
-          <Image
-            src={image}
-            alt="uploaded"
-            ref={imageRef}
-            width={500}
-            height={500}
-            className="max-w-full h-auto"
-          />
+          <TransformWrapper doubleClick={{ disabled: true }}>
+            <TransformComponent wrapperClass="w-full h-full">
+              <div className="relative inline-block">
+                <img src={image} alt="menu" className="block max-w-none" />
+                {boxes.map((b, i) => (
+                  <div
+                    key={i}
+                    style={getBoxStyle(b)}
+                    onClick={() => setSelectedText(b.description)}
+                    title={b.description}
+                  />
+                ))}
+              </div>
+            </TransformComponent>
+          </TransformWrapper>
         )}
+      </section>
 
-        {boxes.map((box, idx) => (
-          <div
-            key={idx}
-            style={getBoxStyle(box)}
-            onClick={() => setSelectedText(box.description)}
-            title={box.description}
-          />
-        ))}
-      </div>
+      {/* ローディング */}
+      {loading && (
+        <p className="absolute top-4 right-4 bg-white/80 px-3 py-1 rounded">
+          OCR処理中...
+        </p>
+      )}
 
-      {loading && <p className="text-white">OCR処理中...</p>}
-
+      {/* 説明ポップアップ */}
       {selectedText && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white p-20 shadow-xl z-10 text-lg text-black">
+        <div className="fixed bottom-0 left-0 right-0 bg-white p-6 shadow-xl z-10 text-lg">
           <h2 className="font-bold mb-2">選択された料理：</h2>
           <p className="mb-2">{selectedText}</p>
           <h2 className="font-bold">説明：</h2>
-          <p className="text-gray-700">
-            {menuDescriptions[selectedText] || '説明は見つかりませんでした'}
-          </p>
+          <p>{menuDescriptions[selectedText] || '説明は見つかりませんでした'}</p>
+          <button
+            className="mt-4 px-4 py-2 bg-gray-200 rounded"
+            onClick={() => setSelectedText('')}
+          >
+            閉じる
+          </button>
         </div>
       )}
     </main>
