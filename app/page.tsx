@@ -139,7 +139,7 @@ export default function Home() {
               <TransformComponent wrapperClass="w-full h-full">
                 {/* 上余白なし、下余白を大きく (mb-40=10rem) */}
                 <div className="relative inline-block mb-200">
-                  <img src={image} alt="menu" className="block max-w-none" />
+                  <img src={image} alt="menu" className="block max-w-full h-auto" />
 
                   {boxes.map((b, i) => (
                     <div
