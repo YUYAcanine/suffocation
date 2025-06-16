@@ -10,8 +10,10 @@ type Vertex = { x: number; y: number };
 type BoundingBox = { description: string; boundingPoly: { vertices: Vertex[] } };
 type ParsedRow = { name: string; description: string };
 
+/* ---------- コンポーネント ---------- */
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
+  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [boxes, setBoxes] = useState<BoundingBox[]>([]);
   const [selectedText, setSelectedText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -62,7 +64,6 @@ export default function Home() {
         const json = await res.json();
         const anns = (json.responses?.[0]?.textAnnotations ?? []) as unknown[];
 
-        /* OCR の元座標そのまま保持 */
         setBoxes(
           anns.slice(1).map((unk): BoundingBox => {
             const a = unk as {
@@ -90,12 +91,13 @@ export default function Home() {
   /* 戻る */
   const resetAll = () => {
     setImage(null);
+    setImgSize(null);
     setBoxes([]);
     setSelectedText('');
   };
 
-  /* ボックスのスタイル（OCR 座標そのまま） */
-  const styleFromBox = (b: BoundingBox): React.CSSProperties => {
+  /* ボックススタイル（元座標そのまま） */
+  const boxStyle = (b: BoundingBox): React.CSSProperties => {
     const [v0, v1, v2] = b.boundingPoly.vertices;
     return {
       position: 'absolute',
@@ -137,19 +139,29 @@ export default function Home() {
 
             <TransformWrapper doubleClick={{ disabled: true }}>
               <TransformComponent wrapperClass="w-full h-full">
-                {/* 画像を上に詰め、下だけ余白 (mb-80) */}
-                <div className="relative inline-block mb-80">
+                {/* コンテナは画像の自然サイズに固定 */}
+                <div
+                  className="relative inline-block mb-80"
+                  style={
+                    imgSize ? { width: imgSize.w, height: imgSize.h } : undefined
+                  }
+                >
                   <img
                     src={image}
                     alt="menu"
-                    className="block max-w-full h-auto"
+                    onLoad={e =>
+                      setImgSize({
+                        w: e.currentTarget.naturalWidth,
+                        h: e.currentTarget.naturalHeight,
+                      })
+                    }
+                    className="block w-full h-full"
                   />
 
-                  {/* 赤枠は画像座標系そのままなのでズレない */}
                   {boxes.map((b, i) => (
                     <div
                       key={i}
-                      style={styleFromBox(b)}
+                      style={boxStyle(b)}
                       onClick={() => setSelectedText(b.description)}
                     />
                   ))}
@@ -186,3 +198,4 @@ export default function Home() {
     </main>
   );
 }
+
