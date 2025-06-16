@@ -138,12 +138,13 @@ export default function Home() {
       <section className="flex-1 bg-black overflow-hidden relative">
         {image && (
           <>
-            {/* 戻る */}
+            {/* ← 矢印ボタン 位置：top-3 → top-12 */}
             <button
               onClick={resetAll}
-              className="fixed top-3 right-3 z-20 bg-white/80 hover:bg-white p-2 rounded shadow"
+              className="fixed top-12 right-3 z-20 bg-white/80 hover:bg-white p-2 rounded shadow text-xl"
+              aria-label="戻る"
             >
-              戻る
+              ←
             </button>
 
             <TransformWrapper doubleClick={{ disabled: true }}>
