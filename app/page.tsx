@@ -1,23 +1,21 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import imageCompression from 'browser-image-compression';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
-/* ---------- 型 ---------- */
+/* 型定義 */
 type Vertex = { x: number; y: number };
 type BoundingBox = { description: string; boundingPoly: { vertices: Vertex[] } };
 type ParsedRow = { name: string; description: string };
 
-/* ---------- コンポーネント ---------- */
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
   const [boxes, setBoxes] = useState<BoundingBox[]>([]);
   const [selectedText, setSelectedText] = useState('');
   const [loading, setLoading] = useState(false);
   const [menuDescriptions, setMenuDescriptions] = useState<Record<string, string>>({});
-  const imgRef = useRef<HTMLImageElement>(null);
 
   /* CSV 読み込み */
   useEffect(() => {
@@ -88,14 +86,14 @@ export default function Home() {
     }
   };
 
-  /* 戻るボタン (状態リセット) */
-  const handleReset = () => {
+  /* 戻る（初期化） */
+  const resetAll = () => {
     setImage(null);
     setBoxes([]);
     setSelectedText('');
   };
 
-  /* ボックス位置計算 */
+  /* ボックススタイル */
   const getBoxStyle = (b: BoundingBox): React.CSSProperties => {
     const [v0, v1, v2] = b.boundingPoly.vertices;
     return {
@@ -105,55 +103,55 @@ export default function Home() {
       width: v1.x - v0.x,
       height: v2.y - v1.y,
       border: '2px solid red',
-      pointerEvents: 'auto' as React.CSSProperties['pointerEvents'],
+      pointerEvents: 'auto',
     };
   };
 
-  /* ---------- JSX ---------- */
   return (
     <main className="h-screen flex flex-col text-black select-none">
-      {/* ヘッダー */}
-      <header className="p-4">
-        <h1 className="text-xl font-bold mb-2">Google Vision OCR メニューアプリ</h1>
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleImageUpload}
-          className="w-full"
-        />
-      </header>
+      {/* ヘッダーとアップロード（画像が無いときだけ表示） */}
+      {!image && (
+        <header className="p-4">
+          <h1 className="text-xl font-bold mb-2">Google Vision OCR メニューアプリ</h1>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleImageUpload}
+            className="w-full"
+          />
+        </header>
+      )}
 
-      {/* 画像ビュー＋戻るボタン */}
+      {/* 画像ビュー & 戻るボタン */}
       <section className="flex-1 bg-black overflow-hidden relative">
-        {/* 戻るボタン (画像がある時のみ) */}
         {image && (
-          <button
-            onClick={handleReset}
-            className="fixed top-3 right-3 z-20 bg-white/80 hover:bg-white p-2 rounded shadow"
-          >
-            戻る
-          </button>
-        )}
+          <>
+            {/* 戻るボタン */}
+            <button
+              onClick={resetAll}
+              className="fixed top-3 right-3 z-20 bg-white/80 hover:bg-white p-2 rounded shadow"
+            >
+              戻る
+            </button>
 
-        {image && (
-          <TransformWrapper doubleClick={{ disabled: true }}>
-            <TransformComponent wrapperClass="w-full h-full">
-              {/* 余白を付けるため my-20 で上下 5rem */}
-              <div className="relative inline-block my-20">
-                <img src={image} ref={imgRef} alt="menu" className="block max-w-none" />
+            <TransformWrapper doubleClick={{ disabled: true }}>
+              <TransformComponent wrapperClass="w-full h-full">
+                {/* 上余白なし、下余白を大きく (mb-40=10rem) */}
+                <div className="relative inline-block mb-200">
+                  <img src={image} alt="menu" className="block max-w-none" />
 
-                {/* OCR ボックス */}
-                {boxes.map((b, i) => (
-                  <div
-                    key={i}
-                    style={getBoxStyle(b)}
-                    onClick={() => setSelectedText(b.description)}
-                  />
-                ))}
-              </div>
-            </TransformComponent>
-          </TransformWrapper>
+                  {boxes.map((b, i) => (
+                    <div
+                      key={i}
+                      style={getBoxStyle(b)}
+                      onClick={() => setSelectedText(b.description)}
+                    />
+                  ))}
+                </div>
+              </TransformComponent>
+            </TransformWrapper>
+          </>
         )}
       </section>
 
@@ -164,11 +162,11 @@ export default function Home() {
 
       {/* 説明ポップアップ */}
       {selectedText && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white p-6 pb-10 shadow-xl z-30 text-lg">
-          {/* × ボタン (右上) */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white p-6 pb-12 shadow-xl z-30 text-lg">
+          {/* × ボタン （2倍サイズ）*/}
           <button
             onClick={() => setSelectedText('')}
-            className="absolute top-2 right-2 text-red-600 text-2xl leading-none"
+            className="absolute top-2 right-2 text-red-600 text-4xl leading-none"
             aria-label="閉じる"
           >
             ×
@@ -183,3 +181,4 @@ export default function Home() {
     </main>
   );
 }
+
