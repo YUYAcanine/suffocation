@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Papa from 'papaparse';
 import imageCompression from 'browser-image-compression';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -13,11 +13,12 @@ type ParsedRow = { name: string; description: string };
 /* ---------- コンポーネント ---------- */
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
-  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [boxes, setBoxes] = useState<BoundingBox[]>([]);
   const [selectedText, setSelectedText] = useState('');
   const [loading, setLoading] = useState(false);
   const [menuDescriptions, setMenuDescriptions] = useState<Record<string, string>>({});
+  const [scale, setScale] = useState<{ x: number; y: number }>({ x: 1, y: 1 });
+  const imgRef = useRef<HTMLImageElement>(null);
 
   /* CSV 読み込み */
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function Home() {
             });
             setMenuDescriptions(map);
           },
-        })
+        }),
       );
   }, []);
 
@@ -79,7 +80,7 @@ export default function Home() {
                 })),
               },
             };
-          })
+          }),
         );
       };
       reader.readAsDataURL(compressed);
@@ -88,30 +89,38 @@ export default function Home() {
     }
   };
 
+  /* 画像読み込み後、描画サイズを取得しスケールを計算 */
+  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const el = e.currentTarget;
+    setScale({
+      x: el.clientWidth / el.naturalWidth,
+      y: el.clientHeight / el.naturalHeight,
+    });
+  };
+
   /* 戻る */
   const resetAll = () => {
     setImage(null);
-    setImgSize(null);
     setBoxes([]);
     setSelectedText('');
   };
 
-  /* ボックススタイル（元座標そのまま） */
-  const boxStyle = (b: BoundingBox): React.CSSProperties => {
+  /* ボックススタイル (スケール補正後) */
+  const styleFromBox = (b: BoundingBox): React.CSSProperties => {
     const [v0, v1, v2] = b.boundingPoly.vertices;
     return {
       position: 'absolute',
-      left: v0.x,
-      top: v0.y,
-      width: v1.x - v0.x,
-      height: v2.y - v1.y,
+      left: v0.x * scale.x,
+      top: v0.y * scale.y,
+      width: (v1.x - v0.x) * scale.x,
+      height: (v2.y - v1.y) * scale.y,
       border: '2px solid red',
     };
   };
 
   return (
     <main className="h-screen flex flex-col text-black select-none">
-      {/* アップロード：画像未選択時のみ表示 */}
+      {/* ファイル選択は画像がない場合のみ表示 */}
       {!image && (
         <header className="p-4">
           <h1 className="text-xl font-bold mb-2">Google Vision OCR メニューアプリ</h1>
@@ -129,7 +138,7 @@ export default function Home() {
       <section className="flex-1 bg-black overflow-hidden relative">
         {image && (
           <>
-            {/* 戻るボタン */}
+            {/* 戻る */}
             <button
               onClick={resetAll}
               className="fixed top-3 right-3 z-20 bg-white/80 hover:bg-white p-2 rounded shadow"
@@ -139,29 +148,18 @@ export default function Home() {
 
             <TransformWrapper doubleClick={{ disabled: true }}>
               <TransformComponent wrapperClass="w-full h-full">
-                {/* コンテナは画像の自然サイズに固定 */}
-                <div
-                  className="relative inline-block mb-80"
-                  style={
-                    imgSize ? { width: imgSize.w, height: imgSize.h } : undefined
-                  }
-                >
+                <div className="relative inline-block mb-80">
                   <img
+                    ref={imgRef}
                     src={image}
+                    onLoad={onImageLoad}
                     alt="menu"
-                    onLoad={e =>
-                      setImgSize({
-                        w: e.currentTarget.naturalWidth,
-                        h: e.currentTarget.naturalHeight,
-                      })
-                    }
-                    className="block w-full h-full"
+                    className="block max-w-full h-auto"
                   />
-
                   {boxes.map((b, i) => (
                     <div
                       key={i}
-                      style={boxStyle(b)}
+                      style={styleFromBox(b)}
                       onClick={() => setSelectedText(b.description)}
                     />
                   ))}
@@ -174,9 +172,7 @@ export default function Home() {
 
       {/* ローディング */}
       {loading && (
-        <p className="absolute top-4 right-4 bg-white/80 px-3 py-1 rounded">
-          OCR処理中...
-        </p>
+        <p className="absolute top-4 right-4 bg-white/80 px-3 py-1 rounded">OCR処理中...</p>
       )}
 
       {/* ポップアップ */}
@@ -198,4 +194,5 @@ export default function Home() {
     </main>
   );
 }
+
 
