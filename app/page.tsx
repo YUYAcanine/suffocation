@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Papa from 'papaparse';
 import Image from 'next/image';
+import imageCompression from 'browser-image-compression';
 
 type Vertex = {
   x: number;
@@ -50,45 +51,59 @@ export default function Home() {
       });
   }, []);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64Image = reader.result as string;
-      setImage(base64Image);
-      setLoading(true);
+    setLoading(true);
 
-      const base64 = base64Image.split(',')[1];
-      const res = await fetch('/api/vision-ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64 }),
+    try {
+      // 画像を圧縮（例：最大1MB, 幅最大1024px）
+      const compressedFile = await imageCompression(file, {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1024,
+        useWebWorker: true,
       });
 
-      const result = await res.json();
-      const annotations = result.responses?.[0]?.textAnnotations || [];
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Image = reader.result as string;
+        setImage(base64Image);
 
-      const parsedBoxes: BoundingBox[] = annotations.slice(1).map((ann: unknown) => {
-        const a = ann as BoundingBox;
-        return {
-          description: a.description,
-          boundingPoly: {
-            vertices: a.boundingPoly.vertices.map((v: Partial<Vertex>) => ({
-              x: v.x ?? 0,
-              y: v.y ?? 0,
-            })),
-          },
-        };
-      });
+        const base64 = base64Image.split(',')[1];
+        const res = await fetch('/api/vision-ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64 }),
+        });
 
-      setBoxes(parsedBoxes);
+        const result = await res.json();
+        const annotations = result.responses?.[0]?.textAnnotations || [];
+
+        const parsedBoxes: BoundingBox[] = annotations.slice(1).map((ann: unknown) => {
+          const a = ann as BoundingBox;
+          return {
+            description: a.description,
+            boundingPoly: {
+              vertices: a.boundingPoly.vertices.map((v: Partial<Vertex>) => ({
+                x: v.x ?? 0,
+                y: v.y ?? 0,
+              })),
+            },
+          };
+        });
+
+        setBoxes(parsedBoxes);
+      };
+
+      reader.readAsDataURL(compressedFile);
+    } catch (error) {
+      console.error('画像圧縮エラー:', error);
+      alert('画像の処理中にエラーが発生しました');
+    } finally {
       setLoading(false);
-    };
-
-    reader.readAsDataURL(file);
-  };
+    }
+};
 
   const getBoxStyle = (box: BoundingBox) => {
     if (!imageRef.current) return {};
@@ -147,7 +162,7 @@ export default function Home() {
         ))}
       </div>
 
-      {loading && <p className="text-black">OCR処理中...</p>}
+      {loading && <p className="text-white">OCR処理中...</p>}
 
       {selectedText && (
         <div className="fixed bottom-0 left-0 right-0 bg-white p-20 shadow-xl z-10 text-lg text-black">

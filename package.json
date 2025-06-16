@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "browser-image-compression": "^2.0.2",
     "googleapis": "^150.0.1",
     "next": "15.3.3",
     "papaparse": "^5.5.3",
